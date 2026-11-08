@@ -2,6 +2,7 @@
 // Kjøres av GitHub hvert 10. minutt (se varsler.yml).
 // 1) Sender meldinger som treneren har lagt i køen (ny video, kommentar, plan, testvarsel).
 // 2) Én gang om morgenen: bursdager, høytider og stevner om 3 dager.
+// 3) Om kvelden: påminnelse om å føre dagens planlagte økt (Emma kl. 20, Sanna kl. 21 som standard).
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
@@ -98,6 +99,28 @@ async function daily(date) {
   }
 }
 
+const PM_STD = { sanna: 21, emma: 20 };
+async function evening(date, hour) {
+  const inn = (await db.collection('innstillinger').doc('paaminnelse').get()).data() || {};
+  let plan = null, okt = null;
+  for (const k of Object.keys(UTOVERE)) {
+    const v = inn[k];
+    if (v === false) continue;
+    const h = typeof v === 'number' ? v : (PM_STD[k] ?? 20);
+    if (hour < h) continue;
+    const ref = db.collection('varsellogg').doc(`kveld-${date}-${k}`);
+    if ((await ref.get()).exists) continue;
+    await ref.set({ tid: new Date().toISOString() });
+    if (!plan) plan = (await db.collection('okplan').where('dato', '==', date).get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (!okt) okt = (await db.collection('okter').where('dato', '==', date).get()).docs.map((d) => d.data());
+    if (okt.some((o) => o.who === k)) continue; // har allerede ført en økt i dag
+    const mine = plan.filter((p) => (p.who === 'begge' || p.who === k) && !(p.hopp || []).includes(k));
+    if (!mine.length) continue;
+    await send([k], 'Husk å føre dagens økt 📝', mine.map((p) => p.tittel).join(', '), './#plan');
+    console.log(`Kveldspåminnelse sendt til ${UTOVERE[k]}.`);
+  }
+}
+
 await sendQueue();
 const { date, hour } = osloNow();
 if (hour >= 7) {
@@ -108,3 +131,4 @@ if (hour >= 7) {
     console.log(`Morgensjekk for ${date} er gjort.`);
   }
 }
+if (hour >= 17) await evening(date, hour);

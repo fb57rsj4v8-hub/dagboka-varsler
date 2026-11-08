@@ -1,0 +1,38 @@
+name: Varsler
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: varsler
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      - run: node send.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Hold prosjektet aktivt
+        run: |
+          M=$(TZ=Europe/Oslo date +%Y-%m)
+          if [ "$(cat keepalive.txt 2>/dev/null)" != "$M" ]; then
+            echo "$M" > keepalive.txt
+            git config user.name "dagboka-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add keepalive.txt
+            git commit -m "Hold aktiv $M"
+            git push
+          fi

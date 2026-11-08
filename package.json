@@ -1,0 +1,9 @@
+{
+  "name": "dagboka-varsler",
+  "private": true,
+  "type": "module",
+  "description": "Sender varsler fra treningsdagboka",
+  "dependencies": {
+    "firebase-admin": "12.7.0"
+  }
+}
